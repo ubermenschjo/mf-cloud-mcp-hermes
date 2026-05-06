@@ -12,18 +12,23 @@ description: MFクラウド API(MCP CA v3) 연결 및 자동 회계 처리. 1인
 | API 키 (HTTP 헤더) | `Authorization: Bearer mf_api_pro_...` | 영구 |
 | OAuth Access Token (툴 파라미터) | `access_token` | **1시간** (TTL=3600s) |
 
-Access Token은 만료 시 자동 갱신 필요.
+## 토큰 자동 갱신 (Hermes Cron)
 
-## 토큰 자동 갱신
+Hermes Agent 내장 스케줄러 사용 — crontab 불필요.
 
-토큰은 `~/.hermes/mf_tokens.json` 에 저장되고 관리됨.
-
-cron 등록:
+```bash
+# Hermes Agent에서 등록
+hermes cron create \
+  --name mf-token-refresh \
+  --schedule "50m" \
+  --repeat 999999 \
+  --deliver local \
+  --prompt "MF Cloud Access Token 자동 갱신..."
 ```
-*/50 * * * * /usr/bin/python3 ~/.hermes/scripts/mf_refresh_token.py >> ~/.hermes/logs/mf_refresh.log 2>&1
-```
 
-스크립트: `scripts/mf_refresh_token.py`
+또는 cronjob 툴로 직접 등록 (이 세션에서 이미 등록됨: job_id=a92739108f79)
+
+토큰 상태 파일: `~/.hermes/mf_tokens.json`
 
 ## 주요 MCP 툴
 
@@ -54,7 +59,7 @@ cron 등록:
 
 ## ワークフロー
 
-1. 토큰 갱신 스크립트 cron 등록 (1회)
+1. Hermes cron 등록 (1회): 50분마다 토큰 자동 갱신
 2. 새 세션: memory에서 access_token 확인 후 툴에 전달
 3. 필요 시 mcp_mfc_ca_authorize 로 새 인증
-4. 50분마다 cron이 자동 토큰 갱신
+4. Hermes cron이 자동 토큰 갱신 ( deliver=local, 로그 저장)

@@ -23,17 +23,24 @@ MF_REDIRECT_URI=http://localhost:8080/callback
 
 Hermes Agent에서 mcp_mfc_ca_mfc_ca_authorize -> 브라우저 승인 -> 콜백
 
-### 3. 토큰 자동 갱신 (cron, 1회만)
+### 3. 토큰 자동 갱신 (Hermes Cron, 1회만 등록)
 
 ```bash
-*/50 * * * * /usr/bin/python3 ~/.hermes/scripts/mf_refresh_token.py \
-  >> ~/.hermes/logs/mf_refresh.log 2>&1
+hermes cron create \
+  --name mf-token-refresh \
+  --schedule "50m" \
+  --repeat 999999 \
+  --deliver local \
+  --prompt "MF Cloud Access Token 자동 갱신..."
 ```
+
+현재 등록된 job: job_id=a92739108f79 (50분마다, deliver=local)
 
 ### 4. 로그 확인
 
 ```bash
-tail -f ~/.hermes/logs/mf_refresh.log
+cat ~/.hermes/logs/mf_refresh.log
+hermes cron list
 ```
 
 ## 파일 구조
@@ -47,7 +54,7 @@ mf-cloud-mcp-hermes/
 ├── .gitignore
 └── scripts/
     ├── mf_callback_server.py   # OAuth 콜백 서버 (1회성)
-    └── mf_refresh_token.py     # 토큰 자동 갱신 (cron)
+    └── mf_refresh_token.py     # 토큰 갱신 (Hermes cron 또는 직접 실행)
 ```
 
 ## 토큰 관리 파일
@@ -55,11 +62,12 @@ mf-cloud-mcp-hermes/
 | 파일 | 내용 |
 |------|------|
 | ~/.hermes/.env | MF_CLIENT_ID, MF_CLIENT_SECRET, MF_API_KEY |
-| ~/.hermes/mf_tokens.json | access_token + refresh_token (자동 관리) |
+| ~/.hermes/mf_tokens.json | access_token + refresh_token (Hermes cron이 자동 갱신) |
 | ~/.hermes/logs/mf_refresh.log | 갱신 이력 |
 
 ## 주의사항
 
 - Access Token TTL = 1시간 (3600s)
 - Refresh Token TTL = 540일
-- cron 50분마다 설정으로 만료前 갱신 보장
+- Hermes cron 50분마다 설정 — 만료 5분 전 갱신
+- crontab 불필요 (Hermes Agent cronjob 사용)
