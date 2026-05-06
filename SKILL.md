@@ -1,46 +1,60 @@
 ---
 name: moneyforward-mcp
-description: "MFクラウド API OAuth + MCPサーバー設定"
-version: 2.0.0
-author: Hermes Agent
-license: MIT
-tags: [moneyforward, oauth, mcp, accounting, japan]
+description: MFクラウド API(MCP CA v3) 연결 및 자동 회계 처리. 1인日本법인 결산월 9월.
 ---
 
-# Moneyforward MCP + OAuth Setup
+# MFクラウド MCP Skill
 
-## 発見済みエンドポイント
+## 인증 구조 (2중)
 
-| 用途 | URL |
-|------|-----|
-| Authorization | `https://api.biz.moneyforward.com/authorize` |
-| Token | `https://api.biz.moneyforward.com/token` |
-| OAuth Discovery | `https://api.biz.moneyforward.com/.well-known/oauth-authorization-server` |
-| **MCP Server** | `https://alpha.mcp.developers.biz.moneyforward.com/mcp/ca/v3` (betaではない) |
+| 계층 | 값 | 갱신 주기 |
+|------|----|----------|
+| API 키 (HTTP 헤더) | `Authorization: Bearer mf_api_pro_...` | 영구 |
+| OAuth Access Token (툴 파라미터) | `access_token` | **1시간** (TTL=3600s) |
 
-## 認証方式 (二重認証)
+Access Token은 만료 시 자동 갱신 필요.
 
+## 토큰 자동 갱신
+
+토큰은 `~/.hermes/mf_tokens.json` 에 저장되고 관리됨.
+
+cron 등록:
 ```
-HTTP Header: Authorization: Bearer mf_api_pro_...  (MCPサーバー認証)
-Tool引数:    access_token: <OAuth access_token>   (MF API呼び出し)
+*/50 * * * * /usr/bin/python3 ~/.hermes/scripts/mf_refresh_token.py >> ~/.hermes/logs/mf_refresh.log 2>&1
 ```
 
-## 重要: alpha vs beta
+스크립트: `scripts/mf_refresh_token.py`
 
-- alpha: APIキー + OAuth 토큰 모두 동작
-- beta: API키 401, OAuth insufficient_scope
-- **alpha만 사용**
+## 주요 MCP 툴
 
-## アプリポータル設定
+### 회계 데이터
+- `mfc_ca_currentOffice` - 법인/결산 기간 정보
+- `mfc_ca_getJournals` - 仕訳一覧
+- `mfc_ca_getReportsTrialBalanceProfitLoss` - PL試算表
+- `mfc_ca_getReportsTrialBalanceBalanceSheet` - BS試算表
+- `mfc_ca_getReportsTransitionProfitLoss` - 月次推移
 
-https://app-portal.moneyforward.com/ で:
-1. 「ユーザー」→ 該当ユーザー → 編集
-2. 「アプリ連携権限」→ 「アプリ連携」+ 「クラウド会計・確定申告」にチェック
+### 마스터 데이터 (権限必要)
+- `mfc_ca_getAccounts` - 勘定科目
+- `mfc_ca_getTaxes` - 税区分
+- `mfc_ca_getTradePartners` - 取引先
 
-## Pitfalls
+### 仕訳作成
+- `mfc_ca_postJournals` - 仕訳作成
 
-1. `beta` MCPエンドポイント → 401/403。必ず`alpha`使用
-2. `curl localhost:8080` 直接実行 → タイムアウト。バックグラウンド実行必須
-3. Redirect URI不一致 → ブラウザ画面が止まる
-4. サービス未連携 → 全API `NOT_FOUND`
-5. `mfc/ca_api/*` スコープ → 必ず `mfc/accounting/*` を使用
+## 엔드포인트
+
+- MCP: `https://alpha.mcp.developers.biz.moneyforward.com/mcp/ca/v3`
+- OAuth Token: `https://api.biz.moneyforward.com/token`
+
+## アプリ情報
+
+- OAuth client_id: 271822152199586
+- MCP 자체 OAuth client_id: 166838700725625
+
+## ワークフロー
+
+1. 토큰 갱신 스크립트 cron 등록 (1회)
+2. 새 세션: memory에서 access_token 확인 후 툴에 전달
+3. 필요 시 mcp_mfc_ca_authorize 로 새 인증
+4. 50분마다 cron이 자동 토큰 갱신
